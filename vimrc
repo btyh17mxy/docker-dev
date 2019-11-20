@@ -26,6 +26,7 @@ Plugin 'vim-scripts/taglist.vim'            "显示Tag
 Plugin 'scrooloose/nerdtree'                "文件浏览
 Plugin 'kien/ctrlp.vim'                     "根据文件名和文件内容模糊搜索并打开文件
 Plugin 'altercation/vim-colors-solarized'   "配色方案
+Plugin 'tpope/vim-fugitive'                 "git
 Plugin 'bling/vim-airline'                  "底部状态栏
 Plugin 'rking/ag.vim'                       "ag插件
 Plugin 'dyng/ctrlsf.vim'                    "让ag支持上下文
@@ -46,15 +47,16 @@ Plugin 'heavenshell/vim-pydocstring'        "自动生成python的docstring
 Plugin 'ekalinin/Dockerfile.vim'            "Dockerfile
 Plugin 'chase/vim-ansible-yaml'
 " Plugin 'fholgado/minibufexpl.vim'           "打开文件的选项卡
-" Plugin 'Yggdroot/indentLine'                "垂直缩进对齐线
+Plugin 'Yggdroot/indentLine'                "垂直缩进对齐线
 " Plugin 'vim-scripts/matchit.zip'            "html标签跳转
 Plugin 'gregsexton/MatchTag'                "html标签匹配高亮
 " Plugin 'terryma/vim-multiple-cursors'       "多光标选择
-" Plugin 'tpope/vim-fugitive'                 "git
 Plugin 'google/vim-maktaba'
 Plugin 'google/vim-glaive'
 Plugin 'posva/vim-vue'
 Plugin 'w0rp/ale'
+Plugin 'moll/vim-node.git'
+Plugin 'maksimr/vim-jsbeautify'
 " Glaive coverage plugin[mappings]
 
 call vundle#end()            " required
@@ -77,7 +79,12 @@ autocmd FileType sh set commentstring=#\ %s
 autocmd BufWritePre *.py :%s/^\(\s*print\)\s\+\(.*\)/\1(\2)/e
 " 打印选中行
 function Rp() range
-    exec "!sed -n " . a:firstline . "," . a:lastline . "p " . expand('%')
+    exec "w"
+    if executable('pbcopy')
+        exec "!sed -n " . a:firstline . "," . a:lastline . "p " . expand('%') . '| pbcopy'
+    else
+        exec "!sed -n " . a:firstline . "," . a:lastline . "p " . expand('%')
+    endif
 endfunction
 "定义 RunSrc()
 func RunSrc()
@@ -86,13 +93,13 @@ exec "w"
 if &filetype == 'py'||&filetype == 'python'
     "call RunPy2InPy3()
     exec "!python %"
-endif
-"使用zen-codeing补全html
-if &filetype == 'html'||&filetype == 'vue'
+elseif &filetype == 'html'||&filetype == 'vue'
+    "使用zen-codeing补全html
     call emmet#expandAbbr(3,"")
-endif
-if &filetype == 'sh'
+elseif &filetype == 'sh'
     exec "!bash %"
+elseif &filetype == 'javascript'
+    exec "!node %"
 endif
 endfunc
 "结束定义RunSrc  
@@ -101,22 +108,28 @@ endfunc
 "需使用以下的格式化插件https://bitbucket.org/zuroc/42qu-linux-config
 func FormartSrc()
 exec "w"
-if &filetype == 'c'
-exec "!astyle --style=ansi --one-line=keep-statements -a --suffix=none %"
-elseif &filetype == 'cpp' || &filetype == 'hpp'
-exec "r !astyle --style=ansi --one-line=keep-statements -a --suffix=none %>
-/dev/null 2>&1"
-elseif &filetype == 'perl'
-exec "!astyle --style=gnu --suffix=none %"
-elseif &filetype == 'py'||&filetype == 'python'
-exec "r !pydent % > /dev/null 2>&1"
-elseif &filetype == 'java'
-exec "!astyle --style=java --suffix=none %"
-elseif &filetype == 'jsp'
-exec "!astyle --style=gnu --suffix=none %"
-elseif &filetype == 'xml'
-exec "!astyle --style=gnu --suffix=none %"
+if &filetype == 'py'||&filetype == 'python'
+    "call RunPy2InPy3()
+    call Autopep8()
+elseif &filetype == 'javascript'
+    call JsBeautify()
 endif
+" if &filetype == 'c'
+" exec "!astyle --style=ansi --one-line=keep-statements -a --suffix=none %"
+" elseif &filetype == 'cpp' || &filetype == 'hpp'
+" exec "r !astyle --style=ansi --one-line=keep-statements -a --suffix=none %>
+" /dev/null 2>&1"
+" elseif &filetype == 'perl'
+" exec "!astyle --style=gnu --suffix=none %"
+" elseif &filetype == 'py'||&filetype == 'python'
+" exec "r !pydent % > /dev/null 2>&1"
+" elseif &filetype == 'java'
+" exec "!astyle --style=java --suffix=none %"
+" elseif &filetype == 'jsp'
+" exec "!astyle --style=gnu --suffix=none %"
+" elseif &filetype == 'xml'
+" exec "!astyle --style=gnu --suffix=none %"
+" endif
 exec "e! %"
 endfunc
 "结束定义FormartSrc
@@ -157,6 +170,9 @@ if filereadable(expand("~/.vim/py.tlp"))
     autocmd BufNewFile *.py  0r  ~/.vim/py.tlp
 endif
 retab 
+" 拼写检查
+setlocal spell spelllang=en_us
+set scrolloff=0
 
 """""""""""""""""""""""""""""""""""""""
 "            
@@ -275,6 +291,7 @@ let g:syntastic_warning_symbol = '⚠'
 let g:syntastic_html_tidy_ignore_errors=[" proprietary attribute \"ms_"]
 "let g:syntastic_python_checkers = ['pyflakes']
 let g:syntastic_python_checkers = ['flake8']
+let g:syntastic_javascript_checkers = ['eslint']
 let g:syntastic_coffee_checkers = ['coffeelint']
 let g:syntastic_coffee_coffeelint_args = "-f ~/.coffeelint.json"
 let g:syntastic_rst_checkers = []
@@ -306,8 +323,8 @@ nnoremap <C-w>E :SyntasticCheck<CR> :SyntasticToggleMode<CR>
 "例如如果map了np, 就会导致搜索n有一个很长的反应时间
 set timeoutlen=200 
 map <F12> :call RunSrc()<CR>
-map <C-F11> :call Autopep8()<CR>
-map <F11> :call Autopep8()<CR>
+map <C-F11> :call FormartSrc()<CR>
+map <F11> :call FormartSrc()<CR>
 map <F10> :SyntasticCheck pyflakes<CR>
 map <F9> :SyntasticCheck python<CR>
 map <F8> :res-1<CR>
